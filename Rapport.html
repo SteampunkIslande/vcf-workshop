@@ -1,0 +1,173 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <title></title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <link rel="stylesheet" href="github.css" type="text/css" />
+</head>
+<body>
+<h1 id="exercice-2-apprendre-à-annoter-les-variants">Exercice 2 : Apprendre à annoter les variants</h1>
+<p>Cet exercice fait suite au premier, qui était de découvrir la chaîne fastq &gt; sam &gt; bam &gt; vcf &gt; vcf.gz (avec les indexations aux étapes intermédiaires).</p>
+<p>Dans le précédent exercice, nous partions des fichiers de séquençage, et avons découvert les outils pour aligner les reads de séquençage avec un génome de référence (<em>E. coli</em> simplifié en l'occurence).</p>
+<p>Un des aspects clés du premier exercice pour comprendre le fichier que nous utiliserons ici est qu'il est possible de rassembler dans un seul VCF les variants de plusieurs échantillons.</p>
+<p>Dans cet exercice, le but sera de comprendre comment annoter des variants contenus dans un fichier VCF.</p>
+<p>Pour cela, nous allons condenser dans ce TP cinq exemples.</p>
+<ul>
+<li><a href="#exercice-2--apprendre-à-annoter-les-variants">Exercice 2 : Apprendre à annoter les variants</a></li>
+<li><a href="#tp-snpeff">TP snpEff</a>
+<ul>
+<li><a href="#première-étape-annotation-simple">Première étape: Annotation simple</a></li>
+<li><a href="#annotation-gene-ontology">Annotation Gene Ontology</a></li>
+<li><a href="#deuxième-étape-comparer-les-variants-dans-une-étude-cascontrôle">Deuxième étape: Comparer les variants dans une étude cas/contrôle</a></li>
+<li><a href="#annotation-comparaison-cascontrôle">Annotation Comparaison Cas/Contrôle:</a></li>
+<li><a href="#troisième-étape--filtrer-les-variants">Troisième étape : filtrer les variants</a></li>
+<li><a href="#filtrage-des-variants-sur-la-base-de-létude-cascontrôle">Filtrage des variants sur la base de l'étude Cas/Contrôle</a></li>
+<li><a href="#filtrage-plus-précis-des-variants">Filtrage plus précis des variants</a></li>
+<li><a href="#pour-aller-plus-loin">Pour aller plus loin</a></li>
+<li><a href="#annoter-avec-des-données-cliniques">Annoter avec des données cliniques</a></li>
+<li><a href="#filtrage-avec-les-annotations-clinvar-basique">Filtrage avec les annotations clinvar (basique)</a></li>
+<li><a href="#filtrage-plus-avancé-des-variants-toujours-annotés-clinvar">Filtrage plus avancé des variants (toujours annotés clinvar)</a></li>
+</ul></li>
+<li><a href="#tp-cutevariant">TP cutevariant</a></li>
+<li><a href="#application-pratique--analyse-dun-vrai-exome">Application pratique : Analyse d'un vrai exome</a></li>
+<li><a href="#comprendre-ce-que-font-les-annotateurs-de-vcf">Comprendre ce que font les annotateurs de VCF</a></li>
+<li><a href="#les-critères-à-utiliser-pour-prédire-leffet-dun-variant">Les critères à utiliser pour prédire l'effet d'un variant</a></li>
+</ul>
+<h2 id="tp-snpeff">TP snpEff</h2>
+<p>Ce TP est issu de https://pcingola.github.io/SnpEff/examples/ (en anglais)</p>
+<p>Si il est facile d'installer snpEff...</p>
+<pre class="shell:"><code>conda install snpEff
+conda install snpSift</code></pre>
+<p>... ainsi que le génome humain de référence annoté, GRCh37.75 (aussi connu sous le nom de hg19)</p>
+<pre class="shell:"><code>snpEff download -v GRCh37.75</code></pre>
+<p>... Le fichier ZIP du TP est introuvable au 6 mars 2021 (et <a href="https://github.com/pcingola/SnpEff/issues/270">cette Issue</a> sur github est là depuis le 18 novembre 2020...)</p>
+<p>Heureusement, <span class="citation">@dridk</span> m'a donné les fichiers du tutoriel !</p>
+<h3 id="première-étape-annotation-simple">Première étape: Annotation simple</h3>
+<h4 id="annotation-gene-ontology">Annotation Gene Ontology</h4>
+<pre class="shell:"><code>SnpEff  -stats ex1.html GRCh37.75 chr7.vcf.gz</code></pre>
+<p>Le but de cette commande est: - Produire un VCF annoté à partir de chr7.vcf.gz (qui s'appelera chr7.ann.vcf) - Produire un rapport statistique en HTML, décrivant les variants dans leur ensemble. Ces statistiques sont directement issues des annotations produites par snpEff</p>
+<p>Pour cela, snpEff a besoin du génome de référence, annoté. En l'occurence, GRCh37.75.</p>
+<p>Enfin, nous lui donnons le fichier contenant les variants (issus des étapes précédentes, juste après séquençage), ici c'est chr7.vcf.gz.</p>
+<p>Le fichier résultant, chr7.ann.vcf, contient, pour chaque variant, les échantillons qui le présentent, et, contrairement au VCF seul, l'effet dudit variant d'un point de vue fonctionnel. Il existe plusieurs types d'impact, par exemple une mutation non-sens (codon stop prématuré), une mutation faux-sens (substitution d'un acide aminé par un autre) ou bien ne pas avoir d'impact du tout (grâce à la redondance du code génétique). Bien sûr, ce ne sont que des exemples, en considérant uniquement les séquences traduites et seulement sur l'aspect structurel d'une protéine codée. En effet, certaines mutations peuvent impacter la traduction, par exemple si la mutation entraîne l'apparition d'un codon rare. Dans ce cas, une mutation dite silencieuse car conservant l'acide aminé sera passée sous silence par ce type d'études incomplète. Bien sûr, snpEff permet une analyse plus poussée en se basant notamment sur la littérature (ce que contient le génome de référence annoté).</p>
+<p>Ci-dessous, un extrait (très résumé) de l'analyse statistique automatique telle qu'effectuée par snpEff.</p>
+<div class="figure">
+<img src="snpEff%20summary%201.png" alt="Résumé statistiques VCF annoté" />
+<p class="caption">Résumé statistiques VCF annoté</p>
+</div>
+<p>Ce qui nous intéresse, c'est notamment le rapport entre le nombre de mutations faux-sens et le nombre de mutations silencieuses. Dans notre cas (voir figure ci-dessous), ce ratio est proche de 1. (comment l'interpréter ? Je ne sais pas).</p>
+<div class="figure">
+<img src="snpEff%20summary%202.png" alt="Statistiques sur les variants" />
+<p class="caption">Statistiques sur les variants</p>
+</div>
+<h3 id="deuxième-étape-comparer-les-variants-dans-une-étude-cascontrôle">Deuxième étape: Comparer les variants dans une étude cas/contrôle</h3>
+<p>Nous allons utiliser SnpSift pour identifier les variants avec le plus d'impact, en fournissant un fichier de pedigree, c'est-à-dire un arbre généalogique des individus concernés par l'étude. Ainsi, en connaissant le mode de transmission de la maladie considérée (ici un caractère récessif autosomal), SnpSift pourra filtrer les variants de manière à garder uniquement ceux dont les caractères sont compatibles avec ce pedigree.</p>
+<h4 id="annotation-comparaison-cascontrôle">Annotation Comparaison Cas/Contrôle:</h4>
+<pre class="shell"><code>SnpSift caseControl -v -tfam pedigree.tfam chr7.ann.vcf &gt; chr7.ann.cc.vcf</code></pre>
+<p>Cette commande a pris environ trois minutes (contrairement au tuto sur lequel est basé ce rapport qui avertit de 60 minutes d'exécution). C'est sans doute parce que dans l'énoncé initial, il était question des chromosomes 7 et 17, tandis que dans cet exemple, il n'y avait que le 7.</p>
+<p>Comme d'habitude, jetons un coup d'oeil au fichier obtenu. Comme il est long, commençons par compter les lignes de données (c'est-à-dire en ignorant les lignes commençant par #). Pour cela, comparons</p>
+<pre class="shell"><code>cat chr7.ann.cc.vcf |  wc -l</code></pre>
+<p>Résultat : 494 196, avec</p>
+<pre class="shell"><code>cat chr7.ann.cc.vcf | grep -v &quot;^#&quot; | wc -l</code></pre>
+<p>Résultat : 494 161. Conclusion, il n'y a que 35 lignes de métadonnées et plusieurs centaines de milliers de variants. Comment s'y retrouver ? En réalité, parmi cette masse de variants, très peu ont une part significative dans la maladie.</p>
+<p>Il suffit de regarder une simple statistique pour le voir. En effet, si on affiche le premier variant :</p>
+<pre class="shell:"><code>cat chr7.ann.cc.vcf | grep -v &quot;^#&quot; | head -n1</code></pre>
+<p>Voici ce que l'on obtient</p>
+<pre><code>7   16487   .   G   T   .   .   AC=9;AN=9;ANN=T|intergenic_region|MODIFIER|CHR_START-AC093627.7|CHR_START-ENSG00000232325|intergenic_region|CHR_START-ENSG00000232325|||n.16487G&gt;T||||||;Cases=0,0,0;Controls=4,0,9;CC_TREND=NaN;CC_GENO=NaN;CC_ALL=1,000e+00;CC_DOM=1,000e+00;CC_REC=1,000e+00 GT  1|1 .   .   .   .   1|1 .   .   .   .   .   1|. .   1|1 1|1 .   .</code></pre>
+<p>Ce qui est parfaitement illisible. Mais la statistique qui nous intéresse dans cette exemple, c'est celle-ci:</p>
+<p><code>;Cases=0,0,0;Controls=4,0,9;</code></p>
+<p>Ce qui signifie que ce variant est retrouvé, chez les témoins, 4 fois à l'état homozygote, 0 fois à l'état hétérozygote, et que ce locus possède 9 allèles (différents de la référence) au total chez les témoins. Pour les cas, la signification est bien entendu la même.</p>
+<p>En plus, ce VCF annoté CC (cas/contrôle, control/case en anglais) présente également plusieurs autres statistiques utiles pour les outils d'analyse que nous allons utiliser par la suite.</p>
+<h3 id="troisième-étape-filtrer-les-variants">Troisième étape : filtrer les variants</h3>
+<p>Petit résumé des étapes précédentes, depuis le fastq.</p>
+<ul>
+<li><strong>fastq &gt; sam</strong> : aligner les reads de séquençage de façon à leur donner des coordonnées par rapport au génome de référence</li>
+<li><strong>sam &gt; bam</strong> : trier et indexer les alignements, et sortir le fichier résultant sous une forme binaire indexée (plus rapide à parcourir)</li>
+<li><strong>bam &gt; vcf</strong> : Grâce à freebayes, identifier les variants (variant calling). Cette étape permet de densifier l'information: au lieu de stocket les 3 milliards de nucléotides que compte le géome humain, le VCF se contente de noter les différences entre l'échantillon et la séquence de référence.</li>
+<li><strong>vcf &gt; vcf.gz</strong> Compresser le VCF avec bgzip, et indexer l'archive pour en accélérer la lecture.</li>
+<li><strong>vcf &gt; ann.vcf</strong> : C'était la première étape de cet exercice. Il s'agit de relier les variants (c'est-à-dire les loci avec au moins un allèle différent par rapport à la référence), et leur fonction biologique. En effet, on peut déjà distinguer les variants qui affectent une région non transcrite de variants qui affectent un transcrit. Parmi elles, on retrouve les régions introniques (qui sont transcrites puis excisées) des régions exoniques (qui se trouvent dans l'ARN messager). Ensuite, cet ADN messager est traduit en protéine, sauf les régions 5'UTR et 3'UTR (qui flanquent la séquence codante). On peut alors s'intéresser aux différents effets de ces mutations à partir de connaissances biologiques. Et si à première vue, un variant qui n'affecte pas directement la traduction peut être classé comme sans effet, la littérature peut affiner les conclusions, notamment si la mutation cause un site d'épissage alternatif : le plus souvent, la protéine est rapidement tronquée.</li>
+<li><strong>ann.vcf &gt; ann.cc.vcf</strong> : Cette étape permet d'enrichir de données statistiques chaque variant détecté. Pour cela, on utilise l'outil SnpSIFT afin de comparer entre eux les allèles dans un test cas/contrôle. L'idée est de donner pour chaque allèle de chaque variant, sa fréquence parmi les individus sains <em>vs</em> sa fréquence chez les individus malades. À cela s'ajoute le nombre total d'allèles (sur l'ensemble des échantillons) pour ce locus, ainsi que des tests statistiques de Fisher et de Cochran-Armitage. Pour ces derniers, la valeur p est indiquée pour chaque variant, correspondant à la probabilité d'avoir juste en considérant que le variant n'est pas lié à la maladie.</li>
+</ul>
+<p>Maintenant, l'objectif est de filtrer ces centaines de milliers de variants, la plupart n'ayant <em>a priori</em> aucun rôle dans la maladie étudiée.</p>
+<p>Pour cela, nous utilisons encore SnpSift, cette fois avec le scénario 'filter'.</p>
+<h4 id="filtrage-des-variants-sur-la-base-de-létude-cascontrôle">Filtrage des variants sur la base de l'étude Cas/Contrôle</h4>
+<pre class="shell:"><code>cat chr7.ann.cc.vcf | SnpSift filter &quot;(Cases[0] = 3) &amp; (Controls[0] = 0)&quot; &gt; chr7.filtered.hom.vcf</code></pre>
+<p>Cette commande va donner le contenu du VCF annoté enrichi à la fonction filter de SnpSift. Cette dernière a besoin du critère, sous forme d'une chaîne de caractères. Cette dernière contient une expression booléenne qui agit comme un prédicat sur chacun des variants du fichier. Si l'expression évalue à vrai pour un variant, ce dernier est conservé et passe dans stdout, puis le suivant est lu. Sinon, il ne passe pas dans stdout. Dans notre cas, la sortie standard est redirigée vers chr7.filtered.hom.vcf.</p>
+<p>À l'issue de cette commande, on se retrouve avec un VCF avec...</p>
+<pre class="shell:"><code>cat chr7.filtered.hom.vcf | wc -l</code></pre>
+<p>441 lignes !</p>
+<p>Bon, en enlevant les headers et les infos en tout genre, on a...</p>
+<pre class="shell:"><code>cat chr7.filtered.hom.vcf | grep -v &quot;^#&quot; | wc -l</code></pre>
+<p>404 lignes. C'est toujours trop.</p>
+<p>Pour rappel, voici l'expression que nous avions utilisée:</p>
+<p>&quot;(Cases[0] = 3) &amp; (Controls[0] = 0)&quot;</p>
+<p>On cherchait donc les variants présents dans les 3 échantillons malades mais jamais chez les témoins.</p>
+<p>Le problème, c'est que certains variants peuvent se retrouver, par hasard, seulement chez les malades. Exemple tout bête, puisque c'est une maladie autosomale récessive, les malades reçoivent chacun un chromosome 'malade' de chacun de leurs parents. Comme les parents ne sont pas malades, les enfants malades ont forcément tous les trois la même paire de chromosomes porteurs de la maladie. Donc si ils héritent tous les trois des deux mêmes chromosomes, ils héritent aussi de tous les variants qui viennent avec. D'où le nombre potentiellement élevé de variants correspondant au critère plutôt simpliste présenté plus haut.</p>
+<p>Il faut donc affiner le filtre. C'est l'objet de cette commande:</p>
+<h4 id="filtrage-plus-précis-des-variants">Filtrage plus précis des variants</h4>
+<pre class="shell:"><code>cat chr7.ann.cc.vcf | SnpSift filter &quot;(Cases[0] = 3) &amp; (Controls[0] = 0) &amp; ((ANN[*].IMPACT = &#39;HIGH&#39;) | (ANN[*].IMPACT = &#39;MODERATE&#39;))&quot; &gt; chr7.filtered.vcf</code></pre>
+<p>Même commande, nouveau filtre. On retrouve la condition précédente (variant seulement chez les malades et tous les malades), agrémenté de deux conditions supplémentaires. On cherche dans le champ ANN (annotations). On veut trouver seulement les variants avec un impact HIGH ou MODERATE.</p>
+<p>Avec ça, on a un VCF bien plus lisible:</p>
+<pre class="shell:"><code>cat chr7.filtered.vcf | wc -l</code></pre>
+<p>38, seulement ! Mais un gros header.</p>
+<pre class="shell:"><code>cat chr7.filtered.vcf | grep -v &quot;^#&quot; | wc -l</code></pre>
+<p>1, juste Un. Un seul variant potentiellement pathogène selon les critères vus précédemment (Présents chez tous les malades, aucun des contrôles, impact modéré à fort).</p>
+<p>On peut même lire la dernière ligne, le plus simple est de lire l'annotation:</p>
+<p><code>ANN=T|stop_gained|HIGH|CFTR|ENSG00000001626|transcript|ENST00000003084|protein_coding|12/27|c.1624G&gt;T|p.Gly542*</code></p>
+<p>On peut voir notamment 'stop_gained', ce qui veut dire qu'il s'agit d'une mutation non-sens. Ce genre de mutation a très souvent un fort impact (à moins qu'il ne touche les derniers acides aminés, et encore).</p>
+<p>On sait aussi que c'est à la position 1624 du transcrit, une mutation G&gt;T. La conséquence est précisée juste après dans l'annotation: Gly542* signifie que c'est une glycine qui a été remplacée par un codon stop à cause de cette mutation. Or, sur une protéine de 1482 acides aminés, une telle troncature rend la protéine complètement inactive physiologiquement. Les individus malades sont donc atteints de la mucoviscidose.</p>
+<h3 id="pour-aller-plus-loin">Pour aller plus loin</h3>
+<p>Les étapes précédentes consistaient à trouver un variant responsable d'une maladie génétique sans autre a priori que des annotations fonctionnelles de référence (donc non pathogènes).</p>
+<p>Dans la pratique, les médecins disposent de bases de données de maladies génétiques et de variants connus. Le plus souvent, donc, les variants du patients ont déjà été annotés comme pathogène. Et c'est la dernière étape de ce premier TP: Utiliser une base de données de variants pathogènes connus pour annoter le VCF du patient.</p>
+<p>Nous allons donc utiliser ClinVar (une base de données en VCF), et SnpSift.</p>
+<h4 id="annoter-avec-des-données-cliniques">Annoter avec des données cliniques</h4>
+<pre class="shell:"><code>SnpSift annotate -v db/clinvar.vcf.gz chr7.vcf.gz &gt; chr7.clinvar.vcf</code></pre>
+<p>Ici, contrairement au tuto, j'ai voulu constater l'effet de cette annotation sur le fichier VCF originel, avant annotation et enrichissement avec les statistiques Cas/Contrôle.</p>
+<p>Avec cette commande,</p>
+<pre class="shell:"><code>SnpSift annotate -v db/clinvar.vcf.gz chr7.ann.cc.vcf &gt; chr7.ann.cc.clinvar.vcf</code></pre>
+<p>Le résultat est similaire, seulement le fichier résultant est plus annoté que dans le cas précédent. En effet, on se retrouve avec les annotations de référence (.ann), les annotations qui comparent statistiquement les cas et les contrôles (.cc) et enfin les annotations cliniques grâce à clinvar (.clinvar).</p>
+<p>Tandis que le précédent a seulement les annotations clinvar.</p>
+<p>Néanmoins, si on compare les deux fichiers VCF résultant des commandes précédentes, on se rend compte que le nombre de variants est le même (ce qui est attendu puisqu'aucun de ces VCF n'a été filtré à ce stade).</p>
+<div class="figure">
+<img src="comparaison%20VCFs.png" alt="Comparaison des VCF" />
+<p class="caption">Comparaison des VCF</p>
+</div>
+<p>Maintenant que clinvar a permis d'annoter ces deux VCF, nous allons pouvoir les filtrer pour conserver uniquement les variants annotés comme pathogènes par clinvar.</p>
+<h4 id="filtrage-avec-les-annotations-clinvar-basique">Filtrage avec les annotations clinvar (basique)</h4>
+<p>Pour commencer, voici le nombre de variants qui ont une signification clinique selon clinvar:</p>
+<pre class="shell:"><code>cat chr7.ann.cc.clinvar.vcf | SnpSift filter &quot;(exists CLNSIG)&quot; | wc -l</code></pre>
+<p>Résultat: 1122</p>
+<p>C'est toujours trop. Mais essayons, pour mieux comprendre le contenu de ce VCF, d'afficher le premier variant annoté avec CLNSIG (on a vu dans la commande précédente qu'il y en avait 1122).</p>
+<p>Pour lire plus facilement le VCF, on peut utiliser ce fichier qui fait partie du repo SnpEff (que je n'avais pas téléchargé en entier)</p>
+<pre class="shell:"><code>curl get &quot;https://raw.githubusercontent.com/pcingola/SnpEff/master/scripts/vcfInfoOnePerLine.pl&quot; &gt; vcfInfoOnePerLine.pl;
+chmod +x vcfInfoOnePerLine.pl</code></pre>
+<p>dans un dossier scripts par exemple.</p>
+<p>Et pour l'utiliser,</p>
+<pre class="shell:"><code>cat chr7.ann.cc.clinvar.vcf | SnpSift filter &quot;(exists CLNSIG)&quot; | grep -v &quot;^#&quot; | head -n1 | scripts/vcfInfoOnePerLine.pl</code></pre>
+<p>Ici, on applique le filtre (clinvar l'a annoté avec une signification clinique, CLNSIG), puis on supprime les headers et autres info (avec grep), puis on prend la première ligne (head -n1) et enfin on affiche la ligne en question avec une info par ligne.</p>
+<p>Par exemple, pour retrouver tous les variants qui affectent CFTR, on peut entrer:</p>
+<h4 id="filtrage-plus-avancé-des-variants-toujours-annotés-clinvar">Filtrage plus avancé des variants (toujours annotés clinvar)</h4>
+<pre class="shell:"><code>SnpSift Filter &#39;(exists CLNDN) &amp; (ANN[*].EFFECT has &#39;stop_gained&#39;) &amp; (ANN[*].GENE = &#39;CFTR&#39;)&#39;</code></pre>
+<p>Dans le tuto, c'est <code>(exists CLN**B**N)</code>, seulement ce champ a manifestement été remplacé dans les nouvelles versions de clinvar par CLNDN. L'essentiel, c'est que ça marche.</p>
+<p>Seulement, ce genre de requête est très spécifique, si on veut sélectionner tous les variants pathogènes, il faut aussi connaître le nom du champ ()</p>
+<h2 id="tp-cutevariant">TP cutevariant</h2>
+<p>Avec cutevariant, il suffit d'ouvrir le fichier VCF annoté (chr7.ann.cc.clinvar.vcf) produit à <a href="#pour-aller-plus-loin">cette étape</a>, le fichier de pedigree (pedigree.tfam), et de sélectionner les champs qui nous intéressent. Avec le fichier annoté par clinvar, c'est le champ CLNSIG qui nous informe sur l'importance clinique du variant. En plus, cutevariant a le bon goût de nous indiquer l'ensemble des valeurs prises par le champ CLNSIG. On peut donc utiliser l'option 'grouper par' et choisir 'CLNSIG' (si il est au moins présent dans la requête). Il devient alors possible de découvrir tous les variants connus dans le VCF.</p>
+<h2 id="application-pratique-analyse-dun-vrai-exome">Application pratique : Analyse d'un vrai exome</h2>
+<ul>
+<li>Analyse descriptive (Combien de variants dans un exome)</li>
+<li>Identification des variants</li>
+</ul>
+<h2 id="comprendre-ce-que-font-les-annotateurs-de-vcf">Comprendre ce que font les annotateurs de VCF</h2>
+<p>Un annotateur de VCF a pour objectif d'associer à chaque variant un ensemble de descriptions, le plus souvent fonctionnelles. La plupart des annotateurs ne fournissent pas les propriétés intrinsèques du variants (chr, ref et alt sont plus de la responsabilité des 'variant callers'). Ces propriétés intrinsèques permettent d'identifier un variant de manière unique, en décrivant la différence entre l'échantillon considéré avec la séquence de référence. Une fois identifié, l'annotateur a pour objectif de donner des informations supplémentaires sur l'impact fonctionnel dudit variant sur la génétique de l'individu porteur. Généralement, on s'intéresse aux conséquences physiologiques sur le patient, comme par exemple prédire une résistance aux anticancéreux à partir du génome d'une tumeur.</p>
+<p>Pour annoter un VCF, il faut avoir une idée de la question posée (voir <a href="#les-critères-à-utiliser-pour-prédire-leffet-dun-variant">la partie suivante</a>).</p>
+<h2 id="les-critères-à-utiliser-pour-prédire-leffet-dun-variant">Les critères à utiliser pour prédire l'effet d'un variant</h2>
+<p>Un annotateur de VCF a pour rôle de décrire chaque variant selon les informations dont il dispose. En effet, l'annotation d'un variant dépend de ce que le généticien souhaite savoir, ainsi que de l'information de référence. On peut trier les annotations selon le critère retenu (inspiré d'une liste fournie par <span class="citation">@dridk</span>):</p>
+<ul>
+<li>Critère de transmissibilité et hérédité. Ce type d'annotation est lié au pedigree, et permet de comparer les individus dans une étude cas/contrôle. Il ne nécessite aucune connaissance fonctionnelle sur le locus concerné (pas d'<em>a priori</em>). Pour annoter un VCF selon ces critères: <code>shell   SnpSift caseControl -v -tfam pedigree.tfam chr7.ann.vcf &gt; chr7.ann.cc.vcf</code> Plus d'infos dans <a href="#annotation-comparaison-cascontrôle">cette sous-section</a></li>
+<li>Critère d'impact sur la protéine. Ce type d'annotation nécessite un génome de référence contenant les annotations fonctionnelles pour chaque locus connu (région transcrite/intergénique, séquence codante/UTR, ...). L'idée de ce genre d'annotation est de suspecter un effet selon la ou les fonctions génétiques au locus considéré. Pour annoter un VCF selon ces critères: <code>shell:   SnpEff  -stats ex1.html GRCh37.75 chr7.vcf.gz</code> Plus d'infos dans <a href="#annotation-gene-ontology">cette sous-section</a></li>
+<li>Critère lié à la littérature (connaissances des maladies génétiques). On utilise une base de données de génétique, qui répertorie chaque variant connu et les arguments cliniques qui vont avec. On peut même y trouver des études de biologie moléculaires et des modèles animaux qui confirment l'impact fonctionnel du variant considéré. C'est le type d'annotation le plus spécifique, mais le moins sensible. Spécifique, car si un variant documenté se trouve dans le génome du patient, il sera forcément annoté avec toutes les connaissances actuelles. Moins sensible, car un variant pathogène inconnu jusqu'alors ne sera pas détecté par ce genre d'annotations. C'est là qu'entrent en jeu les méthodes de découverte de nouveeaux variants, voir ci-dessus et ci-dessous. Pour annoter un VCF selon ces critères: <code>shell:   SnpSift annotate -v db/clinvar.vcf.gz chr7.vcf.gz &gt; chr7.clinvar.vcf</code> Plus d'infos dans <a href="#annoter-avec-des-données-cliniques">cette sous-section</a></li>
+</ul>
+</body>
+</html>
