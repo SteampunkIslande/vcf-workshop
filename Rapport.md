@@ -29,10 +29,14 @@ Pour cela, nous allons condenser dans ce TP cinq exemples.
     - [Première étape : découverte du fichier](#première-étape--découverte-du-fichier)
     - [Seconde étape : annotation**s** du fichier](#seconde-étape--annotations-du-fichier)
     - [Troisième étape : filtrage des variants](#troisième-étape--filtrage-des-variants)
+      - [Filtrage des variants *de novo*](#filtrage-des-variants-de-novo)
+      - [Annotation des variants rares](#annotation-des-variants-rares)
+      - [Filtrage des variants rares](#filtrage-des-variants-rares)
   - [Comprendre ce que font les annotateurs de VCF](#comprendre-ce-que-font-les-annotateurs-de-vcf)
   - [Les critères à utiliser pour prédire l'effet d'un variant](#les-critères-à-utiliser-pour-prédire-leffet-dun-variant)
   - [Quelques commandes utiles en vrac :](#quelques-commandes-utiles-en-vrac-)
     - [Combien de variants pour chaque chromosome ?](#combien-de-variants-pour-chaque-chromosome-)
+    - [Récupérer les annotations d'un variant dans une base de données **immense**](#récupérer-les-annotations-dun-variant-dans-une-base-de-données-immense)
 
 
 ## TP snpEff
@@ -324,6 +328,7 @@ Pour cela, nous allons utiliser SnpSift, qui permet de filtrer les variants selo
 
 Donc, si on veut seulement les variants qui se trouvent chez les enfants mais pas chez les parents (sans se soucier de la ploïdie):
 
+#### Filtrage des variants *de novo*
 ```shell:
 cat quartet.ann.vcf | SnpSift filter "((GEN[1].GT='./.') & (GEN[3].GT='./.')) & ((GEN[0].GT != './.') | (GEN[2].GT != './.'))" > quartet.ann.filtered.vcf
 ```
@@ -342,7 +347,7 @@ ISDBM322018: Mother
 
 Donc GEN[0] (ou SAMPLE[0], c'est la même chose) contient le génotype du fils.
 On veut le génotype (GT) donc on y accède avec le '.' (GEN[0].GT).
-Dans notre expression totale, on chaîne les opérations 'ET' et 'OU'. En effet, on veut que
+Dans notre expression totale, on chaîne les opérations 'ET' et 'OU'. En effet, on veut que :
 
 1- les parents (GEN[1] ET GEN[3]) soient homozygotes REF/REF (noté ./.).
 2- au moins un des enfants (GEN[0] OU GEN[2]) ne soit pas homozygote REF/REF (donc on veut != ./.).
@@ -355,8 +360,15 @@ cat quartet.ann.filtered.vcf | grep -v "#" | head -n10 | cut -f10-13
 ```
 ![Vérifier le filtrage de novo](verifier_filtrage_denovo.png)
 
+#### Annotation des variants rares
+```shell:
 
+```
 
+#### Filtrage des variants rares
+```shell:
+
+```
 
 ## Comprendre ce que font les annotateurs de VCF
 
@@ -398,3 +410,54 @@ cat quartet.ann.vcf | grep -v "#" | cut -f1 | uniq -c
 ```
 
 Explication: rediriger quartet.ann.vcf vers la sortie standard (comme toujours). Ensuite, montrer seulement les lignes **sans** '#' (les variants typiquement). Enfin, cut vient prendre seulement la première colonne, et uniq -c compte le nombre de lignes différentes et leur valeur. Ici, comme on a sélectionné seulement la première colonne (CHR dans un VCF), on s'est retrouvé avec le nom des chromosomes de chaque variant. Comme il y a un nombre limité de chromosomes dans un exome, on peut se représenter le taux de variants en variant/Mégabases pour chaque chromosome.
+
+### Filtrer uniquement les variants référencés dans dbSNP
+
+```shell:
+cat quartet.ann.vcf | SnpSift Filter  "(DB==true)" > quartet.ann.insnpdb.vcf
+```
+
+Avec ce filtrage, on se débarasse des variants qui n'ont pas d'annotation dans dbSNP.
+
+### Récupérer les annotations d'un variant dans une base de données **immense**
+
+Le but du jeu est de récupérer les annotations d'exome sur gnomAD sans télécharger la BDD... Et cette technique pourrait s'appliquer à d'autres BDD de bioinfo, pour peu qu'elles soient sur myvariant.info... Voici comment je m'y suis pris.
+
+```shell
+wget -q -O - "http://myvariant.info/v1/variant/VARIANT_ID" H  "accept: application/json"
+```
+
+```python:
+import requests
+result = requests.get("http://myvariant.info/v1/variant/rs116586548?assembly=hg19")
+...
+data = result.json()
+...
+```
+
+Bon, ici c'était juste la base pour découvrir les requêtes REST. Néanmoins, il est possible d'automatiser la recherche de certains variants grâce à un peu de python et de snakemake.
+
+```shell:
+cat quartet.ann.vcf | grep -v "#" | cut -f1-5 | python "myvariant_info_scraper.py" > gnomadex.tsv
+```
+
+Ceci est la première étape avant automatisation complète : l'automatisation des requêtes. Ici, on commence par sortir le VCF dans la console, puis on récupère seulement les variants (grep), puis on choisit les colonnes 1 à 5 (cut), que l'on donne alors au script.
+
+Ce script se charge de sortir, pour chaque variant, les infos de base : CHR,POS,REF,ALT (séparé par des tabulations). Enfin, la dernière colonne sortie est la fréquence allélique (AF) telle qu'annotée dans gnomAD. Nous lui donnerons un nom (voir le fichier gnomadex_annot) différent du champ AF déjà existant: j'ai choisi (très arbitrairement) GNOMADEX (pour gnomAD, et exome).
+
+Ensuite, il faut compresser et indexer le fichier avec bgzip et tabix respectivement, afin que bcftools puisse annoter le fichier (l'important ici est surtout l'indexation).
+
+Pour compresser/indexer les annotations seules (gnomadex.tsv)
+```shell:
+cat gnomadex.tsv | bgzip > gnomadex.tsv.gz && tabix -s1 -b2 -e2 gnomadex.tsv.gz
+```
+
+Enfin, pour annoter quartet.ann.insnpdb.vcf avec les annotations que l'on vient de produire:
+
+```shell
+bcftools annotate -a "gnomadex.tsv.gz" -c "CHROM,POS,REF,ALT,GNOMADEX" -h "gnomadex_annot" "quartet.ann.insnpdb.vcf" > quartet.ann.gnomadex.vcf
+```
+
+
+Si on exécute les deux dernières commandes (en prenant soin d'enlever head -n1000 bien sûr), on se retrouve avec un fichier, quartet.ann.gnomadex.vcf, qui contient un champ (GNOMADEX), qui, si il existe, indique la fréquence de l'allèle dans la population mondiale.
+
