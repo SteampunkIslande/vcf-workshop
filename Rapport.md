@@ -32,6 +32,9 @@ Pour cela, nous allons condenser dans ce TP cinq exemples.
       - [Filtrage des variants *de novo*](#filtrage-des-variants-de-novo)
       - [Annotation des variants rares](#annotation-des-variants-rares)
       - [Filtrage des variants rares](#filtrage-des-variants-rares)
+  - [Annotations métabolomiques (Reactome)](#annotations-métabolomiques-reactome)
+    - [Découverte de la base de données Reactome](#découverte-de-la-base-de-données-reactome)
+    - [Annotation des variants](#annotation-des-variants)
   - [Comprendre ce que font les annotateurs de VCF](#comprendre-ce-que-font-les-annotateurs-de-vcf)
   - [Les critères à utiliser pour prédire l'effet d'un variant](#les-critères-à-utiliser-pour-prédire-leffet-dun-variant)
   - [Quelques commandes utiles en vrac :](#quelques-commandes-utiles-en-vrac-)
@@ -370,12 +373,122 @@ cat quartet.ann.filtered.vcf | grep -v "#" | head -n10 | cut -f10-13
 
 ```
 
+## Annotations métabolomiques (Reactome)
+
+Pour prédire l'impact fonctionnel d'un variant sur la physiologie de son porteur, il peut être judicieux de l'annoter selon des données de métabolomique. En effet, si une mutation affecte un gène impliqué dans une voie métabolique connue, la probabilité que ce variant ait des conséquences physiologiques s'en voit fortement augmentée. Heureusement, il existe une base de données qui répertorie la plupart des voies métaboliques connues, celle que nous utiliserons ici s'appelle Reactome. Elle peut être téléchargée [à cette adresse](https://reactome.org/download-data), ou en suivant directement [ce lien](https://reactome.org/download/current/ReactomePathways.gmt.zip).
+
+
+### Découverte de la base de données Reactome
+Découvrons ensemble la base de données.
+Par exemple, avec un 'less', on peut voir que c'est un fichier séparé par des tabulations.
+
+```shell:
+less ReactomePathways.gmt
+```
+
+Et si on essaye d'isoler les colonnes avec cut,
+
+```shell:
+cat ReactomePathways.gmt | cut -f1 | less
+```
+
+![First lines of the reactome pathways](some_example_pathways_in_reactome.png)
+
+Cette commande nous a affiché la première colonne de ```Reactome.gmt```. Chaque ligne de cette première colonne contient le nom de la voie métabolique. Ensuite, comme nous allons le montrer avec les commandes suivantes, il y a autant de colonnes que de gènes impliqués dans la voie métabolique répertoriée. C'est donc un fichier avec un nombre de colonnes très variables.
+
+Par exemple, avec cette commande:
+
+```shell:
+cat ReactomePathways.gmt | cut -f3 | less
+```
+
+On affiche la troisième colonne. Et ainsi de suite. À compter de la colonne 5, on commence à voir des lignes vides. Ce qui veut dire que la voie métabolique décrite à la ligne correspondante n'a que 3 gènes connus impliqués. Donc pour s'amuser, on peut entrer -f100 pour le cut. Une voie métabolique peut-elle impliquer 100 gènes ? Spoiler : oui. Exemple : ```SEL1L``` (ne pas le mettre en lettre minuscules...).
+
+Pour savoir dans quelle voie métabolique il est impliqué, il suffit de faire un grep dessus. Comme ceci:
+
+```shell:
+cat ReactomePathways.gmt | grep "SEL1L" | cut -f1
+```
+
+J'ai fait un cut -f1 car tout ce qui nous intréresse c'est le nom de la voie métabolique en question, et pas les 100 gènes impliqués.
+
+Ce qui nous donne:
+
+![Pathways connus impliquant SEL1L](pathways_SEL1L.png)
+
+Si on trouve autant de voies métaboliques, c'est parce que la recherche était un peu maladroite. Ce qui nous intéresse, c'est quelle(s) voies métaboliques ont plus de 100 gènes impliqués. Là, j'ai fait l'inverse. J'ai trouvé le nom d'un gène impliqué dans une voie métabolique très complexe (100 gènes), et j'ai cherché dans quelles autres voies métaboliques il était impliqué. Ce genre de raisonnement absurde doit tout de même amener à plus de vigilance, et il y a toute une gymnastique intellectuelle pour ne pas tomber dans le piège.
+
+Donc, si on veut classer les voies métaboliques, de celle avec le plus de gènes connues à celle avec le moins de gènes connus, on peut utiliser cette commande (le script python est fourni).
+
+```shell:
+cat ReactomePathways.gmt | tr "\t" "," | python "../Rapport Exercice 2/read_gmt.py" | sort -n -r | head -n10
+```
+
+Le résultat est... surprenant (et en même temps pas tant que ça)
+
+![](top10_reactome_pathways.png)
+
+C'est la transduction du signal qui est la mieux annotée, ce qui n'est pas très étonnant car c'est une famille de processus cellulaires parmi les mieux étudiés, notamment en cancérologie. De même pour le métabolisme et le système immunitaire. Le problème, c'est que les noms qui sortent en premier (les voies cellulaires qui ont le plus de gènes connus associés) sont très vagues. La transduction du signal intervient en effet dans de très nombreuses voies, à chaque fois qu'une cellule a besoin d'intégrer un signal.
+
+Quelques commandes à tester pour s'amuser:
+
+Pour avoir le nombre de gènes annotés comme faisant partie du cycle de Krebs (aussi appelé cycle de l'acide citrique)
+```shell:
+cat ReactomePathways.gmt | tr "\t" "," | python "../Rapport Exercice 2/read_gmt.py" | grep "citric"
+```
+
+Pour avoir le nombre de gènes annotés comme faisant partie de la glycolyse
+```shell:
+cat ReactomePathways.gmt | tr "\t" "," | python "../Rapport Exercice 2/read_gmt.py" | grep "Glycolysis"
+```
+
+### Annotation des variants
+
+Maintenant que nous avons bien compris les données d'annotation (une colonne avec une voie cellulaire, et toutes les autres contenant des noms de gènes), nous allons pouvoir passer à l'annotation à proprement parler. Le VCF que nous allons utiliser ne sera rien d'autre que ```quartet.ann.gnomadex.vcf```, généré dans les étapes précédentes.
+
+Si on veut annoter ```quartet.ann.gnomadex.vcf```, il faut exécuter cette commande avec SnpSift :
+```shell:
+SnpSift geneSets -v db/ReactomePathways.gmt quartet.ann.gnomadex.vcf > quartet.ann.gnomadex.reactome.vcf 
+```
+Mais avec une version un peu ancienne de SnpSift (merci les dépôts Linux Mint 18...), il est possible d'avoir ce genre d'erreur (pour peu que l'annotateur que vous aviez utilisé était trop récent).
+
+![Erreur de SnpSift - Annotation inconnue](snpsift_outdated.png)
+
+SnpSift nous informe que l'erreur est minuscule, c'est seulement **une** annotation qu'il n'arrive pas à analyser. C'est d'ailleurs très facile à vérifier. Et ça commence par un grep. Essayons d'enlever TOUTES les lignes incriminées, celles susceptibles de lancer cette erreur. C'est un peu de la triche, mais voyons tout de même l'impact d'une telle modification sur le fichier.
+
+Donc, après avoir copié le nom de l'annotation problématique, nous pouvons créer un fichier VCF qui ne causera plus de tort à SnpSift. C'est un filtrage, en quelque sorte. Un filtrage, oui, mais c'est un peu triché. Donc la manoeuvre apparaîtra dans le nom du fichier résultant.
+
+```shell:
+cat quartet.ann.gnomadex.vcf | grep -v "start_retained_variant" > quartet_cheat.ann.gnomadex.vcf
+```
+
+Après, si on compare les deux fichiers (avant/après filtrage), on voit que l'erreur ne tenait qu'à **une** ligne du VCF d'entrée. La preuve en images:
+
+![Tricher pour une ligne qui pose problème](cheating_to_avoid_snpsiftbug.png)
+
+Donc on peut annoter tranquillement, maintenant que ce bug a été mis sous le tapis (où se cachent la plupart des insectes en règle général).
+
+Voici la commande, la marque de l'astuce est restée :
+
+```shell:
+SnpSift geneSets db/ReactomePathways.gmt quartet_cheat.ann.gnomadex.vcf > quartet_cheat.ann.gnomadex.reactome.vcf
+```
+
+On peut maintenant ouvrir le VCF résultant dans cutevariant, et voir tous les variants concernant la glycolyse. Pourquoi la glycolyse ? Parce qu'on peut. Et que c'était demandé dans l'exercice. Donc ci-dessous, le résultat:
+
+![Cutevariant show reactome data](cutevariant_reactome_data.png)
+
+Pour afficher les variants qui touchent la glycolyse, j'ai utilisé le champ 'msigdb' créé par SnpSift après annotation avec Reactome. La condition que je lui applique (```msigdb ~ "Glycolysis"```) signifie que je veux seulement les variants qui contiennent "Glycolysis" dans le champ msigdb. Petit problème, ou plutôt petit bug à corriger dans les prochaines versions : cutevariant ne lit pas correctement les annotations "msigdb" produites par ma version de SnpSift...
+
 ## Comprendre ce que font les annotateurs de VCF
 
-Un annotateur de VCF a pour objectif d'associer à chaque variant un ensemble de descriptions, le plus souvent fonctionnelles. La plupart des annotateurs ne fournissent pas les propriétés intrinsèques du variants (chr, ref et alt sont plus de la responsabilité des 'variant callers'). Ces propriétés intrinsèques permettent d'identifier un variant de manière unique, en décrivant la différence entre l'échantillon considéré avec la séquence de référence. Une fois identifié, l'annotateur a pour objectif de donner des informations supplémentaires sur l'impact fonctionnel dudit variant sur la génétique de l'individu porteur. Généralement, on s'intéresse aux conséquences physiologiques sur le patient, comme par exemple prédire une résistance aux anticancéreux à partir du génome d'une tumeur.
+Un annotateur de VCF a pour objectif d'associer à chaque variant un ensemble de descriptions, le plus souvent fonctionnelles. La plupart des annotateurs ne fournissent pas les propriétés intrinsèques du variants (chr, ref et alt sont plus de la responsabilité des 'variant callers'). Ces propriétés intrinsèques permettent d'identifier un variant de manière unique, en décrivant la différence entre l'échantillon considéré et la séquence de référence. Une fois identifié, l'annotateur a pour objectif de donner des informations supplémentaires sur l'impact dudit variant sur la génétique de l'individu porteur. Généralement, on s'intéresse aux conséquences physiologiques sur le patient, comme par exemple prédire une résistance aux anticancéreux à partir du génome d'une tumeur.
 
 Pour annoter un VCF, il faut avoir une idée de la question posée (voir [la partie suivante](#les-critères-à-utiliser-pour-prédire-leffet-dun-variant)).
 
+Un annotateur a besoin d'une base de données, qui répertorie un ensemble de caractéristiques (les annotations) accompagnées des coordonnées génétiques de celles-ci. Par exemple, clinvar répertorie un ensemble de variants (identifiés par ses propriétés intrinsèques), et les annotations correspondent aux conséquences cliniques du variant identifié.
+
+Autre exemple, la base de données 'réactome' qui répertorie les principaux pathways métaboliques connus et les gènes impliqués. Ce dernier exemple nécessite une concordance entre le fichier VCF qui doit être annoté au moins avec des noms de gènes, et d'autre part le gène identifié dans le VCF qui doit être connu dans la base 'réactome'. Si les deux concordent, le VCF est enrichi d'informations sur les voies métaboliques dans lesquelles est impliqué chaque variant.
 
 ## Les critères à utiliser pour prédire l'effet d'un variant
 
@@ -461,3 +574,6 @@ bcftools annotate -a "gnomadex.tsv.gz" -c "CHROM,POS,REF,ALT,GNOMADEX" -h "gnoma
 
 Si on exécute les deux dernières commandes (en prenant soin d'enlever head -n1000 bien sûr), on se retrouve avec un fichier, quartet.ann.gnomadex.vcf, qui contient un champ (GNOMADEX), qui, si il existe, indique la fréquence de l'allèle dans la population mondiale.
 
+Le fichier obtenu, quartet.ann.gnomadex.vcf, peut être chargé dans cutevariant, tous les champs sont lisibles car annotés avec bcftools en suivant les conventions d'usage. Comme l'annotation s'est correctement déroulée, on peut lire dans cutevariant le nouveau champ appelé GNOMADEX (celui que l'on a créé). Il contient effectivement les fréquence alléliques telles qu'obtenues en interrogeant gnomAD_exome. Voici une petite capture d'écran pour montrer qu'il est possible de trier/filtrer les allèles en fonction de leur fréquence.
+
+![Sélectionner les variants avec une fréquence allélique inféreieure à un certain seuil](sort_by_gnomadExAF.png)
